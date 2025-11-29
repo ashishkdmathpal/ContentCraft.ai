@@ -127,8 +127,8 @@ export default function DashboardPage() {
               <CardDescription>Create social media posts with AI</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" disabled>
-                Coming Soon
+              <Button className="w-full" onClick={() => router.push('/chat')}>
+                Start Chat
               </Button>
             </CardContent>
           </Card>
@@ -187,8 +187,8 @@ export default function DashboardPage() {
               <CardDescription>Manage your account and API keys</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" disabled>
-                Coming Soon
+              <Button className="w-full" onClick={() => router.push('/settings/api-keys')}>
+                Manage API Keys
               </Button>
             </CardContent>
           </Card>
@@ -197,15 +197,14 @@ export default function DashboardPage() {
         {/* Info Box */}
         <Card className="mt-8">
           <CardHeader>
-            <CardTitle>🎉 Authentication Complete!</CardTitle>
-            <CardDescription>Phase 1 Foundation - In Progress</CardDescription>
+            <CardTitle>🚀 Phase 2: Chat & AI Generation</CardTitle>
+            <CardDescription>In Progress - 40% Complete</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p>✅ User registration and login working</p>
-            <p>✅ JWT authentication implemented</p>
-            <p>✅ Database connected (PostgreSQL + Prisma)</p>
-            <p>✅ Dark/Light theme toggle functional</p>
-            <p>⏳ Next: Chat interface and AI content generation (Phase 2)</p>
+            <p>✅ Chat interface UI built</p>
+            <p>✅ Conversation database logic complete</p>
+            <p>✅ API key management system ready</p>
+            <p>⏳ Next: OpenAI integration with streaming responses</p>
           </CardContent>
         </Card>
       </main>
