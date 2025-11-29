@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { verifyAccessToken } from '@/lib/auth/jwt'
 import { getOpenAIClient, getChatCompletion, updateApiKeyUsage, type ChatMessage } from '@/lib/ai/openai'
+import { parseIntent, isContentGeneration, getPlatformName } from '@/lib/ai/intent-parser'
+import { getContentPrompt, getChatSystemPrompt } from '@/lib/ai/prompts'
 import prisma from '@/lib/db/prisma'
 
 interface RouteParams {
@@ -124,17 +126,25 @@ You can get an API key from: https://platform.openai.com/api-keys`,
       )
     }
 
+    // Parse user intent
+    const intent = parseIntent(validatedData.content)
+    const isGenerating = isContentGeneration(intent)
+
+    // Build system prompt based on intent
+    let systemPrompt: string
+    if (isGenerating && intent.topic && intent.platform) {
+      const contentPrompt = getContentPrompt(intent.platform, intent.topic)
+      systemPrompt = contentPrompt.systemPrompt
+      console.log(`[ContentGen] Platform: ${getPlatformName(intent.platform)}, Topic: ${intent.topic}`)
+    } else {
+      systemPrompt = getChatSystemPrompt()
+    }
+
     // Build conversation history for context
     const conversationHistory: ChatMessage[] = [
       {
         role: 'system',
-        content: `You are ContentCraft AI, a helpful assistant specialized in creating social media content. You help users generate:
-- LinkedIn posts (professional, engaging, with hashtags)
-- Facebook posts (conversational, community-focused)
-- Tweets/X posts (concise, under 280 characters, with hashtags)
-- Instagram captions (visual-focused, with emojis and hashtags)
-
-Always format the content professionally and include relevant hashtags.`,
+        content: systemPrompt,
       },
       // Add recent conversation history (reversed to chronological order)
       ...conversation.messages
@@ -144,14 +154,17 @@ Always format the content professionally and include relevant hashtags.`,
           role: msg.role.toLowerCase() as 'user' | 'assistant',
           content: msg.content,
         })),
-      // Add current user message
+      // Add current user message (optionally with enhanced prompt for content generation)
       {
         role: 'user' as const,
-        content: validatedData.content,
+        content:
+          isGenerating && intent.topic && intent.platform
+            ? getContentPrompt(intent.platform, intent.topic).userPromptTemplate
+            : validatedData.content,
       },
     ]
 
-    // Get AI response (non-streaming for now - will add streaming later)
+    // Get AI response
     const aiResponse = await getChatCompletion(openai, conversationHistory, 'gpt-4o-mini')
 
     // Save AI message
