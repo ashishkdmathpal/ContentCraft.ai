@@ -6,15 +6,17 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Send, Plus, Settings, User, Sparkles, Menu } from 'lucide-react'
+import { Send, Plus, Settings, User, Sparkles, Menu, Edit2, Check, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiRequest, getDefaultTenantId } from '@/lib/api/client'
+import { Textarea } from '@/components/ui/textarea'
 
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  postId?: string
 }
 
 interface Conversation {
@@ -36,6 +38,8 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [editingPostId, setEditingPostId] = useState<string | null>(null)
+  const [editedContent, setEditedContent] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Check authentication and load user data
@@ -224,6 +228,40 @@ export default function ChatPage() {
     router.push('/login')
   }
 
+  const handleEditPost = (postId: string, content: string) => {
+    setEditingPostId(postId)
+    setEditedContent(content)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingPostId(null)
+    setEditedContent('')
+  }
+
+  const handleSaveEdit = async (postId: string) => {
+    if (!editedContent.trim()) return
+
+    try {
+      await apiRequest(`/api/posts/${postId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ content: editedContent }),
+      })
+
+      // Update message content in UI
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.postId === postId ? { ...msg, content: editedContent } : msg
+        )
+      )
+
+      setEditingPostId(null)
+      setEditedContent('')
+    } catch (error) {
+      console.error('Failed to update post:', error)
+      // TODO: Show error toast
+    }
+  }
+
   if (!user || !tenantId) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -356,13 +394,54 @@ export default function ChatPage() {
 
                   <Card
                     className={cn(
-                      'p-4 max-w-[80%] sm:max-w-[70%]',
+                      'p-4 max-w-[80%] sm:max-w-[70%] relative group',
                       message.role === 'user'
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted'
                     )}
                   >
-                    <div className="whitespace-pre-wrap text-sm">{message.content}</div>
+                    {editingPostId === message.postId ? (
+                      <div className="space-y-2">
+                        <Textarea
+                          value={editedContent}
+                          onChange={(e) => setEditedContent(e.target.value)}
+                          className="min-h-[100px] text-sm"
+                          autoFocus
+                        />
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={handleCancelEdit}
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleSaveEdit(message.postId!)}
+                          >
+                            <Check className="h-4 w-4 mr-1" />
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="whitespace-pre-wrap text-sm">{message.content}</div>
+                        {message.postId && message.role === 'assistant' && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleEditPost(message.postId!, message.content)}
+                          >
+                            <Edit2 className="h-3 w-3 mr-1" />
+                            Edit
+                          </Button>
+                        )}
+                      </>
+                    )}
                   </Card>
 
                   {message.role === 'user' && (

@@ -19,6 +19,15 @@ const sendMessageSchema = z.object({
   content: z.string().min(1).max(10000),
 })
 
+/**
+ * Extract hashtags from generated content
+ */
+function extractHashtags(content: string): string[] {
+  const hashtagRegex = /#(\w+)/g
+  const matches = content.match(hashtagRegex)
+  return matches ? matches.map((tag) => tag.slice(1)) : []
+}
+
 // POST /api/conversations/[id]/messages - Send user message and get AI response
 export async function POST(
   request: NextRequest,
@@ -167,6 +176,42 @@ You can get an API key from: https://platform.openai.com/api-keys`,
     // Get AI response
     const aiResponse = await getChatCompletion(openai, conversationHistory, 'gpt-4o-mini')
 
+    // Save generated content as Post if this was a content generation request
+    let postId: string | undefined
+    if (isGenerating && intent.platform && intent.topic) {
+      try {
+        // Map intent platform to Post platform
+        const platformMap: Record<string, string> = {
+          LINKEDIN: 'LINKEDIN_PERSONAL',
+          FACEBOOK: 'FACEBOOK_PAGE',
+          TWITTER: 'TWITTER_X',
+          INSTAGRAM: 'INSTAGRAM_BUSINESS',
+        }
+
+        const post = await prisma.post.create({
+          data: {
+            tenantId: conversation.tenantId,
+            content: aiResponse.content,
+            contentType: 'SOCIAL_POST',
+            platform: intent.platform !== 'GENERAL' ? platformMap[intent.platform] : null,
+            status: 'DRAFT',
+            conversationId,
+            aiModel: 'gpt-4o-mini',
+            promptUsed: validatedData.content,
+            tokensUsed: aiResponse.tokensInput + aiResponse.tokensOutput,
+            keywords: [intent.topic],
+            hashtags: extractHashtags(aiResponse.content),
+          },
+        })
+
+        postId = post.id
+        console.log(`[ContentGen] Saved post ${post.id} for ${getPlatformName(intent.platform)}`)
+      } catch (error) {
+        console.error('Failed to save post:', error)
+        // Don't fail the entire request if post saving fails
+      }
+    }
+
     // Save AI message
     const aiMessage = await prisma.message.create({
       data: {
@@ -176,6 +221,7 @@ You can get an API key from: https://platform.openai.com/api-keys`,
         model: 'gpt-4o-mini',
         tokensInput: aiResponse.tokensInput,
         tokensOutput: aiResponse.tokensOutput,
+        metadata: postId ? { postId } : null,
       },
     })
 
@@ -203,6 +249,7 @@ You can get an API key from: https://platform.openai.com/api-keys`,
           content: aiMessage.content,
           timestamp: aiMessage.createdAt,
           tokensUsed: aiResponse.tokensInput + aiResponse.tokensOutput,
+          postId,
         },
       },
       { status: 201 }
