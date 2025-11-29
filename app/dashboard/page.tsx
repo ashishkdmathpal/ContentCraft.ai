@@ -12,32 +12,55 @@ export default function DashboardPage() {
   const { theme, setTheme } = useTheme()
   const [user, setUser] = useState<{ email: string; name?: string | null } | null>(null)
   const [mounted, setMounted] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Prevent hydration mismatch
   useEffect(() => {
-    setMounted(true)
+    // Mounting flag to prevent SSR/CSR mismatch
+    const mount = () => setMounted(true)
+    mount()
   }, [])
 
   useEffect(() => {
-    // Check if user is logged in
-    const accessToken = localStorage.getItem('accessToken')
+    // Check authentication and load user
+    const loadUser = () => {
+      const accessToken = localStorage.getItem('accessToken')
 
-    if (!accessToken) {
-      router.push('/login')
-      return
+      if (!accessToken) {
+        setError('No authentication token found. Please login.')
+        localStorage.removeItem('refreshToken')
+        setTimeout(() => router.push('/login'), 1500)
+        return
+      }
+
+      // Decode and validate JWT token
+      try {
+        const payload = JSON.parse(atob(accessToken.split('.')[1]))
+
+        // Check if token is expired
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+          setError('Your session has expired. Please login again.')
+          localStorage.removeItem('accessToken')
+          localStorage.removeItem('refreshToken')
+          setTimeout(() => router.push('/login'), 2000)
+          return
+        }
+
+        // Token is valid, set user
+        setUser({
+          email: payload.email,
+          name: payload.name,
+        })
+      } catch (err) {
+        console.error('Invalid token:', err)
+        setError('Invalid authentication token. Please login again.')
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('refreshToken')
+        setTimeout(() => router.push('/login'), 2000)
+      }
     }
 
-    // Decode JWT to get user info (in production, fetch from API)
-    try {
-      const payload = JSON.parse(atob(accessToken.split('.')[1]))
-      setUser({
-        email: payload.email,
-        name: payload.name,
-      })
-    } catch (error) {
-      console.error('Invalid token:', error)
-      router.push('/login')
-    }
+    loadUser()
   }, [router])
 
   const handleLogout = () => {
@@ -46,6 +69,19 @@ export default function DashboardPage() {
     router.push('/login')
   }
 
+  // Show error state
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-destructive font-medium">{error}</p>
+          <p className="text-sm text-muted-foreground">Redirecting to login...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show loading state
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">

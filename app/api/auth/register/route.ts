@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { hashPassword } from '@/lib/auth/password'
 import { generateTokenPair } from '@/lib/auth/jwt'
+import { checkRateLimit, getClientIdentifier, RATE_LIMITS } from '@/lib/auth/rate-limit'
 import prisma from '@/lib/db/prisma'
 
 // Validation schema
@@ -21,6 +22,29 @@ const registerSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting - prevent spam registrations
+    const clientId = getClientIdentifier(request)
+    const rateLimit = checkRateLimit(`register:${clientId}`, RATE_LIMITS.REGISTER)
+
+    if (!rateLimit.allowed) {
+      const retryAfter = Math.ceil((rateLimit.resetTime - Date.now()) / 1000)
+      return NextResponse.json(
+        {
+          error: 'Too many registration attempts. Please try again later.',
+          retryAfter,
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': retryAfter.toString(),
+            'X-RateLimit-Limit': RATE_LIMITS.REGISTER.maxRequests.toString(),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': new Date(rateLimit.resetTime).toISOString(),
+          },
+        }
+      )
+    }
+
     const body = await request.json()
 
     // Validate input
@@ -108,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
+        { error: 'Validation failed', details: error.issues },
         { status: 400 }
       )
     }

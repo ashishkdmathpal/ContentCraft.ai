@@ -41,7 +41,7 @@ export function signRefreshToken(payload: JWTPayload): string {
 export function verifyAccessToken(token: string): JWTPayload | null {
   try {
     return jwt.verify(token, ACCESS_SECRET) as JWTPayload
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -52,7 +52,7 @@ export function verifyAccessToken(token: string): JWTPayload | null {
 export function verifyRefreshToken(token: string): JWTPayload | null {
   try {
     return jwt.verify(token, REFRESH_SECRET) as JWTPayload
-  } catch (error) {
+  } catch {
     return null
   }
 }

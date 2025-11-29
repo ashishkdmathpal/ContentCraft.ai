@@ -54,3 +54,7 @@ prisma/migrations/
 
 # Docker
 *.log
+
+# Playwright
+playwright-report/
+test-results/
