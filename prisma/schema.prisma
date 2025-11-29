@@ -1,0 +1,499 @@
+// ContentCraft AI - Prisma Schema
+// Complete database schema for chat-first content generation platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ AUTHENTICATION ============
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  name            String?
+  avatar          String?
+  emailVerified   Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastLoginAt     DateTime?
+
+  // Relations
+  ownedTenants    Tenant[]  @relation("TenantOwner")
+  memberships     TenantMember[]
+  sessions        Session[]
+  apiKeys         UserApiKey[]
+  conversations   Conversation[]
+
+  @@index([email])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  userAgent    String?
+  ipAddress    String?
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ============ MULTI-TENANCY ============
+
+model Tenant {
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  plan            PlanType  @default(FREE)
+  ownerId         String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Settings
+  settings        Json      @default("{}")
+  brandColors     Json?     // { primary, secondary }
+  logoUrl         String?
+
+  // Relations
+  owner           User      @relation("TenantOwner", fields: [ownerId], references: [id])
+  members         TenantMember[]
+  apiKeys         TenantApiKey[]
+  socialAccounts  SocialAccount[]
+  posts           Post[]
+  blogs           Blog[]
+  templates       Template[]
+  conversations   Conversation[]
+
+  @@index([slug])
+  @@index([ownerId])
+}
+
+model TenantMember {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      Role     @default(MEMBER)
+  joinedAt  DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+enum PlanType {
+  FREE
+  STARTER
+  PROFESSIONAL
+  AGENCY
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+// ============ API KEY MANAGEMENT ============
+
+model UserApiKey {
+  id           String      @id @default(cuid())
+  userId       String
+  provider     ApiProvider
+  encryptedKey String      // AES-256 encrypted
+  label        String?
+  isValid      Boolean     @default(true)
+  lastUsedAt   DateTime?
+  createdAt    DateTime    @default(now())
+
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+model TenantApiKey {
+  id           String      @id @default(cuid())
+  tenantId     String
+  provider     ApiProvider
+  encryptedKey String      // AES-256 encrypted
+  label        String?
+  isValid      Boolean     @default(true)
+  lastUsedAt   DateTime?
+  createdAt    DateTime    @default(now())
+
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+}
+
+enum ApiProvider {
+  // AI Providers
+  OPENAI
+  ANTHROPIC
+  GOOGLE_AI
+
+  // Image Generation
+  FAL_AI
+  REPLICATE
+  STABILITY_AI
+
+  // SEO
+  DATAFORSEO
+  SERPAPI
+
+  // Social Media
+  LINKEDIN
+  FACEBOOK
+  INSTAGRAM
+  TWITTER_X
+  TIKTOK
+}
+
+// ============ SOCIAL ACCOUNTS ============
+
+model SocialAccount {
+  id              String          @id @default(cuid())
+  tenantId        String
+  platform        SocialPlatform
+  accountId       String          // Platform-specific ID
+  accountName     String
+  accountHandle   String?
+  avatarUrl       String?
+  accessToken     String          // Encrypted
+  refreshToken    String?         // Encrypted
+  tokenExpiresAt  DateTime?
+  isActive        Boolean         @default(true)
+  connectedAt     DateTime        @default(now())
+  lastSyncAt      DateTime?
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  posts           PostPublish[]
+
+  @@unique([tenantId, platform, accountId])
+  @@index([tenantId])
+  @@index([platform])
+}
+
+enum SocialPlatform {
+  LINKEDIN_PERSONAL
+  LINKEDIN_COMPANY
+  FACEBOOK_PAGE
+  FACEBOOK_GROUP
+  INSTAGRAM_BUSINESS
+  TWITTER_X
+  TIKTOK
+}
+
+// ============ CONTENT MANAGEMENT ============
+
+model Post {
+  id              String        @id @default(cuid())
+  tenantId        String
+  createdById     String?
+
+  // Content
+  title           String?
+  content         String        @db.Text
+  contentHtml     String?       @db.Text
+  contentType     ContentType   @default(SOCIAL_POST)
+  platform        SocialPlatform?
+
+  // Media
+  images          Json?         // Array of { url, alt, width, height }
+  videos          Json?         // Array of { url, thumbnail, duration }
+
+  // SEO & Metadata
+  keywords        String[]
+  hashtags        String[]
+  seoScore        Int?
+
+  // AI Generation Metadata
+  aiModel         String?
+  promptUsed      String?       @db.Text
+  tokensUsed      Int?
+
+  // Status
+  status          PostStatus    @default(DRAFT)
+
+  // Timestamps
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  publishedAt     DateTime?
+
+  // Relations
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publishes       PostPublish[]
+  conversationId  String?
+  conversation    Conversation? @relation(fields: [conversationId], references: [id])
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([conversationId])
+}
+
+model PostPublish {
+  id              String        @id @default(cuid())
+  postId          String
+  socialAccountId String
+
+  // Publishing Details
+  platformPostId  String?       // ID returned by platform
+  publishedUrl    String?
+  scheduledFor    DateTime?
+  publishedAt     DateTime?
+
+  // Status
+  status          PublishStatus @default(PENDING)
+  errorMessage    String?
+  retryCount      Int           @default(0)
+
+  // Analytics
+  likes           Int?
+  comments        Int?
+  shares          Int?
+  views           Int?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  post            Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  socialAccount   SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, socialAccountId])
+  @@index([postId])
+  @@index([socialAccountId])
+  @@index([status])
+  @@index([scheduledFor])
+}
+
+enum ContentType {
+  SOCIAL_POST
+  BLOG_ARTICLE
+  THREAD
+  CAROUSEL
+  STORY
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  FAILED
+  ARCHIVED
+}
+
+enum PublishStatus {
+  PENDING
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+// ============ BLOG SYSTEM ============
+
+model Blog {
+  id              String    @id @default(cuid())
+  tenantId        String
+
+  // Blog Settings
+  title           String
+  slug            String
+  description     String?   @db.Text
+
+  // Branding
+  logoUrl         String?
+  primaryColor    String?
+
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+  ogImage         String?
+
+  isPublic        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  articles        BlogArticle[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+}
+
+model BlogArticle {
+  id              String        @id @default(cuid())
+  blogId          String
+
+  // Content
+  title           String
+  slug            String
+  excerpt         String?       @db.Text
+  content         String        @db.Text
+  contentHtml     String        @db.Text
+
+  // Media
+  featuredImage   String?
+
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+  keywords        String[]
+
+  // Categorization
+  category        String?
+  tags            String[]
+
+  // Publishing
+  status          ArticleStatus @default(DRAFT)
+  publishedAt     DateTime?
+  scheduledFor    DateTime?
+
+  // Analytics
+  views           Int           @default(0)
+  readTime        Int?          // Minutes
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  blog            Blog          @relation(fields: [blogId], references: [id], onDelete: Cascade)
+
+  @@unique([blogId, slug])
+  @@index([blogId])
+  @@index([status])
+  @@index([publishedAt])
+}
+
+enum ArticleStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+// ============ TEMPLATES ============
+
+model Template {
+  id              String            @id @default(cuid())
+  tenantId        String?           // null = system template
+
+  name            String
+  description     String?
+  category        TemplateCategory
+  platform        SocialPlatform?
+
+  // Template Content
+  promptTemplate  String            @db.Text
+  structureHints  Json?
+  exampleOutput   String?           @db.Text
+
+  // Settings
+  isPublic        Boolean           @default(false)
+  usageCount      Int               @default(0)
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  tenant          Tenant?           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([category])
+  @@index([platform])
+}
+
+enum TemplateCategory {
+  PROMOTIONAL
+  EDUCATIONAL
+  ENGAGEMENT
+  ANNOUNCEMENT
+  THOUGHT_LEADERSHIP
+  PRODUCT_LAUNCH
+}
+
+// ============ CHAT/CONVERSATION HISTORY ============
+
+model Conversation {
+  id        String    @id @default(cuid())
+  tenantId  String
+  userId    String?
+
+  title     String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id])
+  messages  Message[]
+  posts     Post[]
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([updatedAt])
+}
+
+model Message {
+  id              String        @id @default(cuid())
+  conversationId  String
+
+  role            MessageRole
+  content         String        @db.Text
+
+  // If AI response, track usage
+  model           String?
+  tokensInput     Int?
+  tokensOutput    Int?
+
+  // Metadata
+  metadata        Json?         // For images, links, etc.
+
+  createdAt       DateTime      @default(now())
+
+  conversation    Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+// ============ KEYWORD RESEARCH ============
+
+model KeywordResearch {
+  id              String    @id @default(cuid())
+  tenantId        String
+
+  seedKeyword     String
+  keywords        Json      // Array of { keyword, volume, difficulty, cpc, trend }
+
+  // Cache metadata
+  provider        String    // "dataforseo"
+  fetchedAt       DateTime  @default(now())
+  expiresAt       DateTime  // Cache for 30 days
+
+  @@unique([tenantId, seedKeyword])
+  @@index([tenantId])
+  @@index([expiresAt])
+}

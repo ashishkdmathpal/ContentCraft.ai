@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/lib/generated/prisma
+
+# Claude Code & Framework (private development tools)
+.claude/
+ashish-framework/
+
+# Prisma
+prisma/migrations/
+
+# Docker
+*.log
