@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: 'standalone', // Required for Docker builds
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '5mb',
+    },
+  },
 };
 
 export default nextConfig;
