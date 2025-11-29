@@ -83,7 +83,7 @@ model TenantMember {
   id        String   @id @default(cuid())
   tenantId  String
   userId    String
-  role      Role     @default(MEMBER)
+  role      Role     @default(VIEWER)
   joinedAt  DateTime @default(now())
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
