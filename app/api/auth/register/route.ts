@@ -6,6 +6,8 @@ import { z } from 'zod'
 import { hashPassword } from '@/lib/auth/password'
 import { generateTokenPair } from '@/lib/auth/jwt'
 import { checkRateLimit, getClientIdentifier, RATE_LIMITS } from '@/lib/auth/rate-limit'
+import { sendEmail } from '@/lib/email/mailer'
+import { getWelcomeEmail } from '@/lib/email/templates'
 import prisma from '@/lib/db/prisma'
 
 // Validation schema
@@ -114,6 +116,14 @@ export async function POST(request: NextRequest) {
         ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
       },
     })
+
+    // Send welcome email (async, don't wait for it)
+    const welcomeEmail = getWelcomeEmail(user.name || '')
+    sendEmail({
+      to: user.email,
+      subject: welcomeEmail.subject,
+      html: welcomeEmail.html,
+    }).catch((err) => console.error('Failed to send welcome email:', err))
 
     // Return success
     return NextResponse.json(
