@@ -1,0 +1,178 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useTheme } from 'next-themes'
+import { Moon, Sun } from 'lucide-react'
+
+export default function DashboardPage() {
+  const router = useRouter()
+  const { theme, setTheme } = useTheme()
+  const [user, setUser] = useState<{ email: string; name?: string | null } | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    // Check if user is logged in
+    const accessToken = localStorage.getItem('accessToken')
+
+    if (!accessToken) {
+      router.push('/login')
+      return
+    }
+
+    // Decode JWT to get user info (in production, fetch from API)
+    try {
+      const payload = JSON.parse(atob(accessToken.split('.')[1]))
+      setUser({
+        email: payload.email,
+        name: payload.name,
+      })
+    } catch (error) {
+      console.error('Invalid token:', error)
+      router.push('/login')
+    }
+  }, [router])
+
+  const handleLogout = () => {
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    router.push('/login')
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <h1 className="text-2xl font-bold">ContentCraft AI</h1>
+          <div className="flex items-center gap-4">
+            {mounted && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              >
+                {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </Button>
+            )}
+            <Button variant="outline" onClick={handleLogout}>
+              Logout
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-8">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold mb-2">Welcome back{user.name ? `, ${user.name}` : ''}!</h2>
+          <p className="text-muted-foreground">{user.email}</p>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardTitle>Content Generation</CardTitle>
+              <CardDescription>Create social media posts with AI</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" disabled>
+                Coming Soon
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Publishing</CardTitle>
+              <CardDescription>Schedule and publish to social media</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" disabled>
+                Coming Soon
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Blog</CardTitle>
+              <CardDescription>Manage your blog and articles</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" disabled>
+                Coming Soon
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>SEO Keywords</CardTitle>
+              <CardDescription>Research keywords for your content</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" disabled>
+                Coming Soon
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Image Generation</CardTitle>
+              <CardDescription>Create AI images for your posts</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" disabled>
+                Coming Soon
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Settings</CardTitle>
+              <CardDescription>Manage your account and API keys</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" disabled>
+                Coming Soon
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Info Box */}
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>🎉 Authentication Complete!</CardTitle>
+            <CardDescription>Phase 1 Foundation - In Progress</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p>✅ User registration and login working</p>
+            <p>✅ JWT authentication implemented</p>
+            <p>✅ Database connected (PostgreSQL + Prisma)</p>
+            <p>✅ Dark/Light theme toggle functional</p>
+            <p>⏳ Next: Chat interface and AI content generation (Phase 2)</p>
+          </CardContent>
+        </Card>
+      </main>
+    </div>
+  )
+}
